@@ -1,11 +1,5 @@
 # DIAS Secure Logging
 
-## Dependencies
-
-TPM Tools:
-```
-git clone https://github.com/tpm2-software/tpm2-tools
-```
 
 
 ## Awknowledgement 
