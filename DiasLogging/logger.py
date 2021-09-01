@@ -23,6 +23,18 @@ class Logger(object):
     LOW_PRIORITY = Priority.LOW.value
 
     def __init__(self, filename, level="DEBUG", format=FORMAT) -> None:
+        """
+        Creates and configures a normal python logger. Parent class for other
+        logging classes.
+
+        Wraps python logging functions, with a additional priority field. If during
+        function call priority is not given, the default value is LOW.
+
+        :param filename: name of the actual log file
+        :param level: log level, equivalent to the python log level
+        :param format: string denoting the fields in the log format
+        """
+        
         super().__init__()
 
         self._filename = filename
@@ -73,25 +85,3 @@ class Logger(object):
 
     def _check_priority(self, priority):
         return priority if priority in [e.value for e in Logger.Priority] else Logger.LOW_PRIORITY
-
-
-class OpenSSLogger(Logger):
-    SEC_FORMAT = Logger.FORMAT + " - (signature)s"
-
-    def __init__(self, filename, key_ctx, level="DEBUG", format=SEC_FORMAT) -> None:
-        super().__init__(filename, level, format)
-
-        
-class TPMLogger(Logger):
-
-    SEC_FORMAT = Logger.FORMAT + " - (signature)s"
-
-    def __init__(self, filename, key_ctx, level="DEBUG", format=SEC_FORMAT) -> None:
-        super().__init__(filename, level, format)
-
-
-
-if __name__ == "__main__":
-
-    logger = Logger("testlog.log")
-    logger.error("test", Logger.HIGH_PRIORITY)
