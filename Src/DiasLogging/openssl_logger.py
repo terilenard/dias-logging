@@ -1,5 +1,5 @@
 import os
-from typing import overload
+import base64
 
 from logger import Logger
 from bootstrap import PRIV_NAME
@@ -72,7 +72,9 @@ class OpenSSLogger(Logger):
 
         log = super()._log(log_func=log_func, msg=msg, 
             priority=priority, do_write=False)  
+        
         signature = sign(self._priv_key, log.encode(), OpenSSLogger.DIGEST)
+        signature = base64.encodebytes(signature)
 
         signed_log = log + OpenSSLogger.EOM_TEMPLATE.format(signature)
 
@@ -85,4 +87,4 @@ class OpenSSLogger(Logger):
 if __name__ == "__main__":
     
     logger = OpenSSLogger("testlog", "/tmp/"+ PRIV_NAME)
-    logger.info("test", Logger.LOW_PRIORITY, True)
+    log, signature = logger.info("test", Logger.LOW_PRIORITY, True)
