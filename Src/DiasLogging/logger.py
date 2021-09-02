@@ -16,13 +16,13 @@ class Logger(object):
         MEDIUM = "MEDIUM"
         LOW = "LOW"
 
-    FORMAT = "%(created)f - %(levelname)s - Priority: %(priority)s - %(message)s"
+    LOG_TEMPLATE = "{time} - Priority: {priority} - {message}"
     
     HIGH_PRIORITY = Priority.HIGH.value
     MEDIUM_PRIORITY = Priority.MEDIUM.value
     LOW_PRIORITY = Priority.LOW.value
 
-    def __init__(self, filename, level="DEBUG", format=FORMAT) -> None:
+    def __init__(self, filename, level="DEBUG") -> None:
         """
         Creates and configures a normal python logger. Parent class for other
         logging classes.
@@ -32,7 +32,6 @@ class Logger(object):
 
         :param filename: name of the actual log file
         :param level: log level, equivalent to the python log level
-        :param format: string denoting the fields in the log format
         """
         
         super().__init__()
@@ -46,42 +45,52 @@ class Logger(object):
         self._handler = FileHandler(self._filename)
         self._handler.setLevel(self._level)
         
-        self._format = Formatter(format)
+        self._format = Formatter()
         
         self._handler.setFormatter(self._format)
 
         self._logger.addHandler(self._handler)
 
-    def info(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.info(msg, extra=extra)
+    def info(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.info, msg=msg,
+            priority=priority, do_write=do_write)
 
-    def warning(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
+    def warning(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.warning, msg=msg,
+            priority=priority, do_write=do_write)
 
+    def error(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.error, msg=msg,
+            priority=priority, do_write=do_write)
 
-    def error(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
-
-
-    def critical(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
-
+    def critical(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.critical, msg=msg,
+            priority=priority, do_write=do_write)
 
     def _check_priority(self, priority):
         return priority if priority in [e.value for e in Logger.Priority] else Logger.LOW_PRIORITY
+
+    def _build_log(self, **kwargs):
+        return Logger.LOG_TEMPLATE.format(**kwargs)
+
+    def _log(self, log_func, **kwargs):
+        
+        msg = kwargs.get("msg", None)
+        priority = kwargs.get("priority", None)
+        do_write = kwargs.get("do_write", False)
+
+        if not msg:
+            raise ValueError("Invalid arguments.")
+
+        prior = self._check_priority(priority)
+        msg = self._build_log(time="0", priority=prior, message=msg)
+
+        if do_write:
+            log_func(msg)
+
+        return msg
+
+
+if __name__ == "__main__":
+    logger = Logger("testlog")
+    logger.error("test")

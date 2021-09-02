@@ -1,7 +1,8 @@
 import os
 from typing import overload
 
-from DiasLogging.logger import Logger
+from logger import Logger
+from bootstrap import PRIV_NAME
 
 from OpenSSL.crypto import FILETYPE_PEM
 from OpenSSL.crypto import load_privatekey, sign
@@ -16,10 +17,10 @@ class KeyNotLoadedError(Exception):
 
 class OpenSSLogger(Logger):
 
-    SEC_FORMAT = Logger.FORMAT + " - (signature)s"
+    EOM_TEMPLATE = " - {}"
     DIGEST = "SHA1"
 
-    def __init__(self, filename, priv_path, level="DEBUG", format=SEC_FORMAT) -> None:
+    def __init__(self, filename, priv_path, level="DEBUG"):
         """
         Creates and configures a custom logger over the Logger class. Additionally adds
         a cryptographics signature to the message logged.
@@ -31,47 +32,57 @@ class OpenSSLogger(Logger):
 
         :param priv_path: path to private key, must be the same provided to bootstrap.py  
         """
-        super().__init__(filename, level, format)
+        super().__init__(filename, level)
 
         if not os.path.isfile(priv_path):
             raise FileNotFoundError("Private key file not found.")
         
-        with open("priv_path", r) as priv_f:
+        with open(priv_path, 'r') as priv_f:
             self._priv_key = load_privatekey(FILETYPE_PEM, priv_f.read())
 
-    def info(self, msg, priority=None):
+    def info(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.info, msg=msg, 
+            priority=priority, do_write=do_write)
+
+    def warning(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.warning, msg=msg, 
+            priority=priority, do_write=do_write)
+
+
+    def error(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.error, msg=msg, 
+            priority=priority, do_write=do_write)
+
+
+    def critical(self, msg, priority=None, do_write=True):
+        return self._log(log_func=self._logger.critical, msg=msg, 
+            priority=priority, do_write=do_write)
+
+    def _log(self, log_func, **kwargs):
         
-        if not self._pub_key or not self._priv_key:
+        msg = kwargs.get("msg", None)
+        priority = kwargs.get("priority", None)
+        do_write = kwargs.get("do_write", None)
+
+        if msg == None or priority == None or do_write == None:
+            raise ValueError("Invalid arguments.")
+
+        if not self._priv_key:
             raise KeyNotLoadedError()
-        
-        signature = sign(self._priv_key, msg, OpenSSLogger.DIGEST)
 
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            'signature': signature
-            }
-        self._logger.info(msg, extra=extra)
+        log = super()._log(log_func=log_func, msg=msg, 
+            priority=priority, do_write=False)  
+        signature = sign(self._priv_key, log.encode(), OpenSSLogger.DIGEST)
 
-    def warning(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
+        signed_log = log + OpenSSLogger.EOM_TEMPLATE.format(signature)
+
+        if do_write:
+            log_func(signed_log)
+
+        return log, signature
 
 
-    def error(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
-
-
-    def critical(self, msg, priority=None):
-        value = self._check_priority(priority)
-        extra={
-            'priority': value,
-            }
-        self._logger.warning(msg, extra=extra)
+if __name__ == "__main__":
+    
+    logger = OpenSSLogger("testlog", "/tmp/"+ PRIV_NAME)
+    logger.info("test", Logger.LOW_PRIORITY, True)
