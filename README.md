@@ -1,6 +1,11 @@
 # DIAS Secure Logging
 
 
+## Dependencies
+
+sudo apt install swig
+
+sudo python3 -m pip install pyopenssl
 
 ## Awknowledgement 
 
