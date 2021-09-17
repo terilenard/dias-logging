@@ -19,18 +19,14 @@ def TPM2_Provision(folderName, outFileName):
     Provisions a new hierarchy of keys (the endorsemene key), and stores the context file in the given folder.
     '''
 
-    # In case the folder already exists, do not continue
-    if (path.exists(folderName)):
-        print("Folder %s already exists!" % folderName)
-        return False
-
-    # Create the folder
-    try:
-        result = os.mkdir(folderName)
-    except OSError as ex:
-        print("Failed to create folder: ", folderName)
-    else:
-        print("Folder %s successfully created" % folderName)
+    # In case the folder does not exists, create it
+    if (not path.exists(folderName)):
+        try:
+            result = os.mkdir(folderName)
+        except OSError as ex:
+            print("Failed to create folder: ", folderName)
+        else:
+            print("Folder %s successfully created" % folderName)
 
     # Launch the command
     result = ''
@@ -48,23 +44,18 @@ def TPM2_CreateAsymKey(parentkFileName, pkFolderName, pubkFileName, prvkFileName
     Create a public/private key pair, and writes the public part of the key to the given file.
     '''
 
-    # In case the folder already exists, do not continue
-    if (path.exists(pkFolderName)):
-        print("Folder %s already exists!" % pkFolderName)
+    if not os.path.isfile(parentkFileName):
+        print("Could not find: " + parentkFileName)
         return False
 
-    # In case parent folder does not exist, do not continue
-    #if (path.exists(parentkFolderName) == False):
-    #    print("Folder %s does not exists!" % parentkFolderName)
-    #    return False
-
-    # Create the folder
-    try:
-        result = os.mkdir(pkFolderName)
-    except OSError as ex:
-        print("Failed to create folder: ", pkFolderName)
-    else:
-        print("Folder %s successfully created" % pkFolderName)
+    # In case the folder does not exists, create it
+    if (not path.exists(pkFolderName)):
+        try:
+            result = os.mkdir(pkFolderName)
+        except OSError as ex:
+            print("Failed to create folder: ", pkFolderName)
+        else:
+            print("Folder %s successfully created" % pkFolderName)
 
     # Launch the command
     result = ''

@@ -1,3 +1,6 @@
+import sys
+
+sys.path.append("../")
 
 from argparse import ArgumentParser
 
@@ -20,13 +23,11 @@ Generator:
 if __name__ == "__main__":
     
     parser = ArgumentParser(description="Bootstraping script for the DIAS Secure Logging Module.")
-    parser.add_argument("--provsiion_tpm")
     parser.add_argument("--provision_aggregator", action='store_true', help="Generates a set of RSA asymetric keys for the aggregator."
                         " Requires a sequence of public keys from generators. Saves them on the <path> provided.")
     parser.add_argument("--provision_generator", action='store_true', help="Generates a set of RSA asymetric keys in <path>.")
     parser.add_argument("--generator_keys", type=str, nargs='+', help="Sequence of paths for generators public keys, containing their location.")
     parser.add_argument("--path", type=str, help="Path where to bootstrap credentials.")
-    parser.add_argument("--bits", type=int, help="Key length in bits for RSA.")
     parser.add_argument("--out_pub", type=str, help="Output file for the public part of the RSA keys.")
     parser.add_argument("--out_priv", type=str, help="Output file for the private part of the RSA keys.")
 
@@ -46,7 +47,7 @@ if __name__ == "__main__":
         pass
     elif args.provision_generator:
         
-        if args.path is None or args.bits is None:
+        if args.path is None:
             print("Invalid arguments. Please provide <path> or <bits> for generator keys.")
             exit(-3)
 
@@ -54,8 +55,25 @@ if __name__ == "__main__":
             print("Provide out files for pub and priv.")
             exit(-3)
 
-        TPM2_CreateAsymKey()
+        
+        success =  TPM2_Provision(args.path, "primary.ctx")
 
-    else args.provision_tpm:
-        pass
-        return
+        if success:
+            print("Created primary.ctx in " + args.path)
+
+            success = TPM2_CreateAsymKey(
+                args.path + "/primary.ctx",
+                args.path + "/children",
+                args.out_pub,
+                args.out_priv
+                )
+
+            if success:
+                print("Created asymetric keys in " + args.path + "/children")
+                exit(0)
+            else:
+                print("Error creating asymetric keys.")
+                exit(-1)
+        else:
+            print("Error creating primary.ctx")
+            exit(-1)
