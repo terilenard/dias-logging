@@ -62,7 +62,7 @@ def TPM2_CreateAsymKey(parentkFileName, pkFolderName, pubkFileName, prvkFileName
     # Launch the command
     result = ''
     try:
-        result = subprocess.run([TPM2T_CREATE, '-C', parentkFileName, '-u', pkFolderName + '/' + pubkFileName, '-r', pkFolderName + '/' + prvkFileName, TPM2T_TCTI_ABRMD])
+        result = subprocess.run([TPM2T_CREATE, '-Q', '-C', parentkFileName, '-u', pkFolderName + '/' + pubkFileName, '-r', pkFolderName + '/' + prvkFileName, TPM2T_TCTI_ABRMD])
     except Exception as ex:
         print("There was an error while launchnig " + TPM2T_CREATE)
         return False
@@ -92,7 +92,7 @@ def TPM2_LoadKey(parentFileName, pubkFileName, prvkFileName, outHFileName):
     Load the key (including public and private area) to the TPM
     '''
     try:
-        result = subprocess.run([TPM2T_LOAD, '-C', parentFileName, '-u', pubkFileName, '-r', prvkFileName, '-c', outHFileName, TPM2T_TCTI_ABRMD])
+        result = subprocess.run([TPM2T_LOAD, '-Q', '-C', parentFileName, '-u', pubkFileName, '-r', prvkFileName, '-c', outHFileName, TPM2T_TCTI_ABRMD])
 
         if result.returncode == 0:
             return True
@@ -126,7 +126,7 @@ def TPM2_Sign(keyFile, inFileName, outFileName):
     '''
 
     try:
-        result = subprocess.run([TPM2T_SIGN, '-c', keyFile, '-o', outFileName, inFileName, TPM2T_TCTI_ABRMD])
+        result = subprocess.run([TPM2T_SIGN, '-Q', '-c', keyFile, '-o', outFileName, inFileName, TPM2T_TCTI_ABRMD])
 
         if result.returncode == 0:
             return True
@@ -143,7 +143,7 @@ def TPM2_Hash(inFileName, outFile):
     '''
     try:
 
-        result = subprocess.run([TPM2T_HASH, inFileName, "-o", outFile, "--hex",TPM2T_TCTI_ABRMD])
+        result = subprocess.run([TPM2T_HASH, inFileName, "-o", outFile, "--hex",TPM2T_TCTI_ABRMD, '-Q'])
         if result.returncode == 0:
             return True
 
@@ -168,7 +168,7 @@ def TPM2_ExtendPcr(pcrIndex, digestFile):
     args = "{}:{}={}".format(str(pcrIndex), "sha1", digest.stdout)
     try:
        
-        result = subprocess.run([TPM2T_EXTEND_PCR, args])
+        result = subprocess.run([TPM2T_EXTEND_PCR, args, "-Q"])
         if result.returncode == 0:
             return True
 
