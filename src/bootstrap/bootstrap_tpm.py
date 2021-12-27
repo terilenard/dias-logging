@@ -4,10 +4,7 @@ sys.path.append("../")
 
 from argparse import ArgumentParser
 
-from tpm2tools.wrapper import TPM2_Provision, TPM2_CreateAsymKey
-
-from bootstrap_openssl import _gen_rsa
-from bootstrap_openssl import _mkdir
+from wrapper import TPM2_Provision, TPM2_CreateAsymKey
 
 
 """
