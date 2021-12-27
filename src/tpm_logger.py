@@ -1,21 +1,22 @@
 import asyncio
 import json
-from logging import log
 import signal
 import sys
+import logging
+
+from configparser import ConfigParser
+from argparse import ArgumentParser
 
 from hashlib import sha1
 
-sys.path.append("/home/pi/workspace/dias-logging/Src")
-sys.path.append("/home/pi/workspace/dias-logging/Src/DiasLogging/communication_protocols/dias_communication")
+sys.path.append("/home/teri/Workspace/dias-logging/src")
+sys.path.append("/home/teri/Workspace/dias-hackathon-testbed1/modules/communication_protocol/python/")
 
-from DiasLogging.logging.logger import Logger as ParentLogger
-from DiasLogging.logging.handlers import *
-from DiasLogging.logging.utils import *
-from DiasLogging.tpm2tools.wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, TPM2_ExtendPcr
+from utils import *
+from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, TPM2_ExtendPcr
 
 from comm_core.communicator import Communicator
-from comm_core.logging_pb2 import LogMessage
+from comm_core.proto.logging_pb2 import LogMessage
 
 """
 Dependencies
@@ -24,19 +25,39 @@ Dependencies
     pip3 install blist
 """
 
-class TPMLogger(ParentLogger):
+def setup_logger(name, log_file, level=logging.DEBUG):
+    """To setup as many loggers as you want"""
+    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 
-    MAX_MSGS = 3
+    handler = logging.FileHandler(log_file)
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger(name)
+    logger.setLevel(level)
+    logger.addHandler(handler)
+
+    return logger
+
+
+class TPMLogger():
+
+    MAX_MSGS = 1
     PCR = 4
     _REQUEST_ADDRESS = "tcp://127.0.0.1:11002"
     _MODULE_NAME = "TPMLogger"
     _REQUESTOR_NAME = "DummyRequestor"
     _REQUESTOR_ADDRESS = "tcp://127.0.0.1:11004"
 
-    def __init__(self, filename):
-        super().__init__(filename)
+    def __init__(self, config):
+
+        self._sec_logger = setup_logger("TPMLogger", config["log"]["tpm_log"])
+        self._app_logger = setup_logger("ServiceTPMLogger", config["log"]["info_log"])
+
+        self._tpm_conf = dict(config["tpm"])
+        self._zmq_conf = dict(config["zmq"])
         self._key_loaded = False
         self._communicator = None
+
         self._queue = list()
         self._loop = asyncio.get_event_loop()
 
@@ -45,80 +66,87 @@ class TPMLogger(ParentLogger):
         Verifies that the provision step was done correctly,
         and the keys/handlers exists in expected directories.
         """
-        return exists(TPM2_PRIMARY_CTX) and exists(TPM2_PRIV_RSA) and exists(TPM2_PUB_RSA)
+        return exists(self._tpm_conf["tpm2_primary_ctx"]) \
+                and exists(self._tpm_conf["tpm2_priv_rsa"]) \
+                and exists(self._tpm_conf["tpm2_pub_rsa"])
 
     def _hash(self, msg):
         return sha1(msg.encode()).hexdigest()
 
     async def _sign(self, logs):
 
-        self.info("Started singing")
+        self._app_logger.info("Started singing")
         json_log = dict()
 
         for log in logs:
             json_log[self._hash(log)] = log
 
-        dump(logs, TMP_FILE)
-        digest = TPM2_Hash(TMP_FILE, TMP_DIGEST_FILE)
+        dump(logs, self._tpm_conf["tmp_file"])
+        digest = TPM2_Hash(self._tpm_conf["tmp_file"],
+                           self._tpm_conf["tmp_digest_file"])
 
         if not digest:
-            self.error("Couldn't hash: {}.".format(str(logs)))
+            self._app_logger.error("Couldn't hash: {}.".format(str(logs)))
             return
 
-        self.info("Extending pcr with:" + TMP_DIGEST_FILE)
+        self._app_logger.info("Extending pcr with:" + self._tpm_conf["tmp_digest_file"])
 
-        success = TPM2_ExtendPcr(TPMLogger.PCR, TMP_DIGEST_FILE)
+        success = TPM2_ExtendPcr(self._tpm_conf["pcr"],
+                                 self._tpm_conf["tmp_digest_file"])
         if not success:
-            self.error("Couldn't extend PCR {} with {}".format(TPMLogger.PCR, TMP_DIGEST_FILE))
+            self._app_logger.error("Couldn't extend PCR {} with {}".format(
+                        self._tpm_conf["pcr"],
+                        self._tpm_conf["tmp_digest_file"]))
             return
 
         if not self._key_loaded:
-            self.error("Keys not loaded.")
+            self._app_logger.error("Keys not loaded.")
             return
 
-        success = TPM2_Sign(TPM2_PRIV_CTX, TMP_DIGEST_FILE, TMP_OUTPUT)
+        success = TPM2_Sign(self._tpm_conf["tpm2_priv_ctx"],
+                            self._tpm_conf["tmp_digest_file"],
+                            self._tpm_conf["tmp_output"])
 
         if not success:
-            self.error("Couldn't sign {}".format(str(logs)))
+            self._app_logger.error("Couldn't sign {}".format(str(logs)))
             return
 
-        signature = load_binary(TMP_OUTPUT)
-        self.info("Signature: {}".format(signature))
-        
+        signature = load_binary(self._tpm_conf["tmp_output"])
+       # self.sec_logger.info(signature)
+
         json_log["signature"] = signature
-        self.info(json.dumps(json_log))
-        self.info("Finished signing")
+        self._sec_logger.info(json.dumps(json_log))
+        self._app_logger.info("Finished signing")
 
     def start(self):
 
         if not self._check_provision():
-            self.error("Provision error.")
+            self._app_logger.error("Provision error.")
             return False
 
-        self._key_loaded = TPM2_LoadKey(TPM2_PRIMARY_HNDLR, TPM2_PUB_RSA, 
-            TPM2_PRIV_RSA, TPM2_PRIV_CTX)
+        self._key_loaded = TPM2_LoadKey(self._tpm_conf["tpm2_primary_ctx"],
+                                        self._tpm_conf["tpm2_pub_rsa"],
+                                        self._tpm_conf["tpm2_priv_rsa"],
+                                        self._tpm_conf["tpm2_priv_ctx"])
 
         if not self._key_loaded:
-            self.error("Couldn't load keys into the TPM.")
-            return False
-
-        if not make_pipe(FIFO_FILE):
-            self._info_log.error("Couldn't create fifo.")
+            self._app_logger.error("Couldn't load keys into the TPM.")
             return False
 
         if self._loop is None:
             self._loop = asyncio.get_event_loop()
 
-        self.debug("Starting Communicator on {}".format(TPMLogger._REQUEST_ADDRESS))
+        self._app_logger.debug("Starting Communicator on {}".format(self._zmq_conf["request_address"]))
+
         self._communicator = Communicator(
-            TPMLogger._REQUEST_ADDRESS,
+            self._zmq_conf["request_address"],
             self._on_request,
             None, # pub address
-            [(TPMLogger._REQUESTOR_NAME, TPMLogger._REQUEST_ADDRESS)],
+            [(self._zmq_conf["requestor_name"], self._zmq_conf["request_address"])],
             [])
-        self.debug("Communicator started.")
+        self._app_logger.debug("Communicator started.")
 
-        self.debug("Starting the loop")
+        self._app_logger.debug("Starting the loop")
         self._loop.run_forever()
 
     def stop(self):
@@ -127,14 +155,16 @@ class TPMLogger(ParentLogger):
             self._communicator.stop()
 
         if self._loop.is_running:
-            self.debug("Stopping the loop...")
-            self._loop.close()
-            self.debug("Loop stopped.")
+            self._app_logger.debug("Stopping the loop...")
+
+            self._loop.call_soon_threadsafe(self._loop.stop)
+
+            self._app_logger.debug("Loop stopped.")
 
         if self._key_loaded:
-            self.debug("Removing handlers from TPM. This can break something.")
+            self._app_logger.debug("Removing handlers from TPM. This can break something.")
             TPM2_FlushContext()
-            self.debug("Handlers removed from TPM.")
+            self._app_logger.debug("Handlers removed from TPM.")
 
     def _on_request(self, request):
         
@@ -145,7 +175,7 @@ class TPMLogger(ParentLogger):
             request.reply("ok".encode())
 
         self._queue.append(log_request.message)
-        self.info("Added in queue. New size: {}".format(len(self._queue)))
+        self._app_logger.info("Added in queue. New size: {}".format(len(self._queue)))
 
         if len(self._queue) == TPMLogger.MAX_MSGS:
             logs = [self._queue.pop(0) for i in range(TPMLogger.MAX_MSGS)]
@@ -163,6 +193,13 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
+    parser = ArgumentParser(description="TPM Logger")
+    parser.add_argument("-c", type=str, help="Path to config file.")
+    args = parser.parse_args()
+
+    config = ConfigParser()
+    config.read(args.c)
+
     global tpm_logger
-    tpm_logger = TPMLogger("tpmlogger.log")
+    tpm_logger = TPMLogger(config)
     tpm_logger.start()
