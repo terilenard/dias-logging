@@ -43,10 +43,6 @@ class TPMLogger():
 
     MAX_MSGS = 1
     PCR = 4
-    _REQUEST_ADDRESS = "tcp://127.0.0.1:11002"
-    _MODULE_NAME = "TPMLogger"
-    _REQUESTOR_NAME = "DummyRequestor"
-    _REQUESTOR_ADDRESS = "tcp://127.0.0.1:11004"
 
     def __init__(self, config):
 
@@ -56,10 +52,8 @@ class TPMLogger():
         self._tpm_conf = dict(config["tpm"])
 #        self._zmq_conf = dict(config["zmq"])
         self._key_loaded = False
-        # self._communicator = None
 
         self._pipe = config["log"]["fifo"]
-        self._pipe_fd = None
         self._queue = list()
         self._loop = asyncio.get_event_loop()
 
@@ -78,6 +72,10 @@ class TPMLogger():
     async def _listen_on_pipe(self):
 
         msg = read_pipe(self._pipe)
+        if not msg:
+            asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
+            return
+
         self._queue.append(msg)
         self._app_logger.info("Added in queue. New size: {}".format(len(self._queue)))
 
@@ -127,7 +125,6 @@ class TPMLogger():
             return
 
         signature = load_binary(self._tpm_conf["tmp_output"])
-       # self.sec_logger.info(signature)
 
         json_log["signature"] = signature
         self._sec_logger.info(json.dumps(json_log))
@@ -138,7 +135,7 @@ class TPMLogger():
     def start(self):
 
         if not make_pipe(self._pipe):
-            # self._info_log.error("Couldn't create fifo.")
+            self._app_logger.error("Couldn't create fifo.")
             return False
 
         if not self._check_provision():
@@ -159,25 +156,11 @@ class TPMLogger():
 
         self._loop.create_task(self._listen_on_pipe())
 
-       # self._app_logger.debug("Starting Communicator on {}".format(self._zmq_conf["request_address"]))
-
-        # self._communicator = Communicator(
-        #     self._zmq_conf["request_address"],
-        #     self._on_request,
-        #     None, # pub address
-        #     [(self._zmq_conf["requestor_name"], self._zmq_conf["request_address"])],
-        #     [])
-        # self._app_logger.debug("Communicator started.")
-
         self._app_logger.debug("Starting the loop")
         self._loop.run_forever()
 
     def stop(self):
 
-        # if self._communicator:
-        #     self._communicator.stop()
-
-        read_event.clear()
         if self._loop.is_running:
             self._app_logger.debug("Stopping the loop...")
 
@@ -190,23 +173,6 @@ class TPMLogger():
             TPM2_FlushContext()
             self._app_logger.debug("Handlers removed from TPM.")
 
-
-    # def _on_request(self, request):
-    #
-    #     # log_request = LogMessage()
-    #     # log_request.ParseFromString(request.data)
-    #
-    #     if (log_request):
-    #         request.reply("ok".encode())
-    #
-    #     self._queue.append(log_request.message)
-    #     self._app_logger.info("Added in queue. New size: {}".format(len(self._queue)))
-    #
-    #     if len(self._queue) == TPMLogger.MAX_MSGS:
-    #         logs = [self._queue.pop(0) for i in range(TPMLogger.MAX_MSGS)]
-    #         asyncio.run_coroutine_threadsafe(self._sign(logs), self._loop)
-    #         return
-  
 
 def signal_handler(signum, frame):
     tpm_logger.stop()

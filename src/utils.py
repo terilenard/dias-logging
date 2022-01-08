@@ -3,9 +3,7 @@ import errno
 
 from binascii import hexlify
 from stat import S_IFIFO, S_IRUSR, S_IWUSR
-from threading import Event
 
-read_event = Event()
 
 def exists(dir):
     """
@@ -38,18 +36,37 @@ def close_pipe(fifo):
     os.close(fifo)
 
 
-def read_pipe(fifo):
-    print("Opening FIFO...")
-    with open(fifo) as _fifo:
-        print("FIFO opened")
-        read_event.set()
-        while read_event.is_set():
-            data = _fifo.read()
-            if len(data) == 0:
-                print("Writer closed")
-                break
-            print('Read: "{0}"'.format(data))
-            return data
+def read_pipe(path, bufferSize=100, timeout=0.100):
+    import time
+    grace = True
+    content = None
+    try:
+        pipe = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+
+        while True:
+            try:
+                buf = os.read(pipe, bufferSize)
+                if not buf:
+                    break
+                else:
+                    content = buf.decode("utf-8")
+                    return content
+            except OSError as e:
+                if e.errno == 11 and grace:
+                    time.sleep(timeout)
+                    grace = False
+                else:
+                    break
+
+    except OSError as e:
+        if e.errno == errno.ENOENT:
+            pipe = None
+        else:
+            raise e
+    finally:
+        os.close(pipe)
+
+    return content
 
 
 def dump(data, file):
