@@ -10,13 +10,10 @@ from argparse import ArgumentParser
 from hashlib import sha1
 
 sys.path.append("/home/teri/Workspace/dias-logging/src")
-sys.path.append("/home/teri/Workspace/dias-hackathon-testbed1/modules/communication_protocol/python/")
 
 from utils import *
-from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, TPM2_ExtendPcr
+from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, TPM2_ExtendPcr, TPM2_Provision
 
-#from comm_core.communicator import Communicator
-#from comm_core.proto.logging_pb2 import LogMessage
 
 """
 Dependencies
@@ -138,9 +135,15 @@ class TPMLogger():
             self._app_logger.error("Couldn't create fifo.")
             return False
 
-        if not self._check_provision():
-            self._app_logger.error("Provision error.")
-            return False
+        success = TPM2_Provision(self._tpm_conf["tpm2_prov_path"], "primary.ctx")
+
+        if success:
+            self._app_logger.debug("Recreated primary.ctx in " + self._tpm_conf["tpm2_prov_path"])
+
+            if success:
+                self._app_logger.debug("Finished recreating primary.ctx.")
+            else:
+                self._app_logger.error("Could not recreate primary.ctx.")
 
         self._key_loaded = TPM2_LoadKey(self._tpm_conf["tpm2_primary_ctx"],
                                         self._tpm_conf["tpm2_pub_rsa"],
