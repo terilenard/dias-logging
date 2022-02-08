@@ -12,6 +12,7 @@ TPM2T_SIGN = TPM2T_PATH + "tpm2_sign"
 TPM2T_HASH = TPM2T_PATH + "tpm2_hash"
 TPM2T_EXTEND_PCR = TPM2T_PATH + "tpm2_pcrextend"
 TPM2T_READ_PCR = TPM2T_PATH + "tpm2_pcrread"
+TPM2T_DICTIONNARY_LOCKOUT = TPM2T_PATH + "tpm2_dictionarylockout"
 
 TPM2T_TCTI_ABRMD = "--tcti=tabrmd:bus_name=com.intel.tss2.Tabrmd"
 
@@ -198,11 +199,20 @@ def TPM2_ReadPcr(pcrIndex):
         print("There was an error while launchnig " + TPM2T_EXTEND_PCR)
         return False
 
+def TPM2_DICTIONARY_LOCKOUT():
 
-# if __name__ == "__main__":
+    try:
+        result = subprocess.run([TPM2T_DICTIONNARY_LOCKOUT, "--setup-parameters", "--max-tries=4294967295", "--clear-lockout"])
 
-#     digest = TPM2_Hash("/tmp/logs.dat", "/tmp/digest.dat")
-#     TPM2_ExtendPcr(4, "/tmp/digest.dat");
+        if result.returncode == 0:
+            return True
 
-#     success = TPM2_Sign(TPM2_PRIV_CTX, TMP_DIGEST_FILE, TMP_OUTPUT)
-#     print(str(success))
+        return False
+
+    except subprocess.SubprocessError:
+        print("There was an error while launchnig " + TPM2T_EXTEND_PCR)
+        return False
+
+if __name__ == "__main__":
+    success = TPM2_DICTIONARY_LOCKOUT()
+    print(str(success))

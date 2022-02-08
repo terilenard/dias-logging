@@ -12,7 +12,8 @@ from hashlib import sha1
 sys.path.append("/home/teri/Workspace/dias-logging/src")
 
 from utils import *
-from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, TPM2_ExtendPcr, TPM2_Provision
+from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, \
+    TPM2_ExtendPcr, TPM2_Provision, TPM2_DICTIONARY_LOCKOUT
 
 
 """
@@ -21,6 +22,7 @@ Dependencies
     pip3 install protobuf
     pip3 install blist
 """
+
 
 def setup_logger(name, log_file, level=logging.DEBUG):
     """To setup as many loggers as you want"""
@@ -134,6 +136,13 @@ class TPMLogger():
         if not make_pipe(self._pipe):
             self._app_logger.error("Couldn't create fifo.")
             return False
+
+        success = TPM2_DICTIONARY_LOCKOUT()
+
+        if success:
+            self._app_logger.info("Removed dictionary lockout.")
+        else:
+            self._app_logger.error("Could not execute dictionary lockout")
 
         success = TPM2_Provision(self._tpm_conf["tpm2_prov_path"], "primary.ctx")
 
