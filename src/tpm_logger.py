@@ -59,7 +59,7 @@ class TPMLogger:
         self._mqtt_client = MQTTClient(config["mqtt"]["user"],
                                       config["mqtt"]["passwd"],
                                       config["mqtt"]["host"],
-                                      config["mqtt"]["port"])
+                                      int(config["mqtt"]["port"]))
 
         self._loop = asyncio.get_event_loop()
 
@@ -134,6 +134,10 @@ class TPMLogger:
 
         json_log["signature"] = signature
         self._sec_logger.info(json.dumps(json_log))
+
+        if self._mqtt_client.is_connected():
+            self._mqtt_client.publish(json.dumps(json_log))
+
         self._app_logger.info("Finished signing")
 
         asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
