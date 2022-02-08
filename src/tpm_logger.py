@@ -11,6 +11,7 @@ from hashlib import sha1
 
 sys.path.append("/home/teri/Workspace/dias-logging/src")
 
+from client_mqtt import MQTTClient
 from utils import *
 from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, \
     TPM2_ExtendPcr, TPM2_Provision, TPM2_DICTIONARY_LOCKOUT
@@ -38,7 +39,7 @@ def setup_logger(name, log_file, level=logging.DEBUG):
     return logger
 
 
-class TPMLogger():
+class TPMLogger:
 
     MAX_MSGS = 1
     PCR = 4
@@ -54,6 +55,12 @@ class TPMLogger():
 
         self._pipe = config["log"]["fifo"]
         self._queue = list()
+
+        self._mqtt_client = MQTTClient(config["mqtt"]["user"],
+                                      config["mqtt"]["passwd"],
+                                      config["mqtt"]["host"],
+                                      config["mqtt"]["port"])
+
         self._loop = asyncio.get_event_loop()
 
     def _check_provision(self):
@@ -163,6 +170,8 @@ class TPMLogger():
             self._app_logger.error("Couldn't load keys into the TPM.")
             return False
 
+        self._mqtt_client.connect()
+
         if self._loop is None:
             self._loop = asyncio.get_event_loop()
 
@@ -172,6 +181,11 @@ class TPMLogger():
         self._loop.run_forever()
 
     def stop(self):
+
+        if self._mqtt_client.is_connected():
+            self._app_logger.debug("Stopping the mqtt client")
+            self._mqtt_client.stop()
+            self._app_logger.debug("Mqtt client stopped")
 
         if self._loop.is_running:
             self._app_logger.debug("Stopping the loop...")
@@ -184,6 +198,7 @@ class TPMLogger():
             self._app_logger.debug("Removing handlers from TPM. This can break something.")
             TPM2_FlushContext()
             self._app_logger.debug("Handlers removed from TPM.")
+
 
 
 def signal_handler(signum, frame):
