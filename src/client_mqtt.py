@@ -1,5 +1,6 @@
 
 import logging
+from time import sleep
 
 import paho.mqtt.client as mqtt
 
@@ -23,7 +24,12 @@ class MQTTClient(object):
 
     def connect(self):
         self._inst.loop_start()
-        self._inst.connect(self._host, self._port, 60)
+        while not self.is_connected():
+            try:
+                self._inst.connect(self._host, self._port, 60)
+                print("trying to connect")
+            except ConnectionRefusedError:
+                sleep(0.5)
 
     def stop(self):
         if self._inst.is_connected():
@@ -34,6 +40,7 @@ class MQTTClient(object):
 
         if rc == 0:
             logger.info("Client connected successfully.")
+            print("connected")
         else:
             logger.error("Client couldn't connect. Received code: {}.".format(rc))
             logger.info("Client tries reconnect...")
