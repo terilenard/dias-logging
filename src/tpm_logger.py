@@ -98,7 +98,8 @@ class TPMLogger:
         json_log = dict()
 
         for log in logs:
-            json_log[self._hash(log)] = log
+            #json_log[self._hash(log)] = log
+            json_log["Message"] = log
 
         dump(logs, self._tpm_conf["tmp_file"])
         digest = TPM2_Hash(self._tpm_conf["tmp_file"],
@@ -132,7 +133,8 @@ class TPMLogger:
 
         signature = load_binary(self._tpm_conf["tmp_output"])
 
-        json_log["signature"] = signature
+        json_log["Signature"] = signature
+
         self._sec_logger.info(json.dumps(json_log))
 
         if self._mqtt_client.is_connected():
