@@ -17,14 +17,6 @@ from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, \
     TPM2_ExtendPcr, TPM2_Provision, TPM2_DICTIONARY_LOCKOUT
 
 
-"""
-Dependencies
-    pip3 install pyzmq
-    pip3 install protobuf
-    pip3 install blist
-"""
-
-
 def setup_logger(name, log_file, level=logging.DEBUG):
     """To setup as many loggers as you want"""
     formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -50,7 +42,6 @@ class TPMLogger:
         self._app_logger = setup_logger("ServiceTPMLogger", config["log"]["info_log"])
 
         self._tpm_conf = dict(config["tpm"])
-#        self._zmq_conf = dict(config["zmq"])
         self._key_loaded = False
 
         self._pipe = config["log"]["fifo"]
