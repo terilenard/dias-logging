@@ -24,12 +24,7 @@ class MQTTClient(object):
 
     def connect(self):
         self._inst.loop_start()
-        while not self.is_connected():
-            try:
-                self._inst.connect(self._host, self._port, 60)
-                print("trying to connect")
-            except ConnectionRefusedError:
-                sleep(0.5)
+        self._inst.connect(self._host, self._port, 60)
 
     def stop(self):
         if self._inst.is_connected():

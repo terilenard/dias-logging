@@ -3,13 +3,13 @@ import json
 import signal
 import sys
 import logging
+import re
+import time
 
+from string import printable
 from configparser import ConfigParser
 from argparse import ArgumentParser
-
 from hashlib import sha1
-
-sys.path.append("/home/teri/Workspace/dias-logging/src")
 
 from client_mqtt import MQTTClient
 from utils import *
@@ -73,13 +73,25 @@ class TPMLogger:
             asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
             return
 
-        self._queue.append(msg)
-        self._app_logger.info("Added in queue. New size: {}".format(len(self._queue)))
+        json_log = dict()
 
-        if len(self._queue) == 1:
-            logs = [self._queue.pop(0) for i in range(1)]
-            asyncio.run_coroutine_threadsafe(self._sign(logs), self._loop)
-            return
+        log = ''.join(char for char in msg if char in printable)
+        print(log)
+        m = re.search('CAN ID: (.+?) .', log)
+        if m:
+            found = m.group(1)
+            json_log["CanId"] = int(found)
+
+        m = re.search('(.+?) CAN', log)
+
+        if m:
+            found = m.group(1)
+            json_log["Message"] = found + " ID"
+
+        json_log["Timestamp"] = time.time()
+        if self._mqtt_client.is_connected():
+            self._mqtt_client.publish(
+            json.dumps(json_log))
 
         asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
 
@@ -141,31 +153,32 @@ class TPMLogger:
             self._app_logger.error("Couldn't create fifo.")
             return False
 
-        success = TPM2_DICTIONARY_LOCKOUT()
-
-        if success:
-            self._app_logger.info("Removed dictionary lockout.")
-        else:
-            self._app_logger.error("Could not execute dictionary lockout")
-
-        success = TPM2_Provision(self._tpm_conf["tpm2_prov_path"], "primary.ctx")
-
-        if success:
-            self._app_logger.debug("Recreated primary.ctx in " + self._tpm_conf["tpm2_prov_path"])
-
-            if success:
-                self._app_logger.debug("Finished recreating primary.ctx.")
-            else:
-                self._app_logger.error("Could not recreate primary.ctx.")
-
-        self._key_loaded = TPM2_LoadKey(self._tpm_conf["tpm2_primary_ctx"],
-                                        self._tpm_conf["tpm2_pub_rsa"],
-                                        self._tpm_conf["tpm2_priv_rsa"],
-                                        self._tpm_conf["tpm2_priv_ctx"])
-
-        if not self._key_loaded:
-            self._app_logger.error("Couldn't load keys into the TPM.")
-            return False
+        #
+        # success = TPM2_DICTIONARY_LOCKOUT()
+        #
+        # if success:
+        #     self._app_logger.info("Removed dictionary lockout.")
+        # else:
+        #     self._app_logger.error("Could not execute dictionary lockout")
+        #
+        # success = TPM2_Provision(self._tpm_conf["tpm2_prov_path"], "primary.ctx")
+        #
+        # if success:
+        #     self._app_logger.debug("Recreated primary.ctx in " + self._tpm_conf["tpm2_prov_path"])
+        #
+        #     if success:
+        #         self._app_logger.debug("Finished recreating primary.ctx.")
+        #     else:
+        #         self._app_logger.error("Could not recreate primary.ctx.")
+        #
+        # self._key_loaded = TPM2_LoadKey(self._tpm_conf["tpm2_primary_ctx"],
+        #                                 self._tpm_conf["tpm2_pub_rsa"],
+        #                                 self._tpm_conf["tpm2_priv_rsa"],
+        #                                 self._tpm_conf["tpm2_priv_ctx"])
+        #
+        # if not self._key_loaded:
+        #     self._app_logger.error("Couldn't load keys into the TPM.")
+        #     return False
 
         self._mqtt_client.connect()
 
@@ -191,10 +204,10 @@ class TPMLogger:
 
             self._app_logger.debug("Loop stopped.")
 
-        if self._key_loaded:
-            self._app_logger.debug("Removing handlers from TPM. This can break something.")
-            TPM2_FlushContext()
-            self._app_logger.debug("Handlers removed from TPM.")
+        # if self._key_loaded:
+        #     self._app_logger.debug("Removing handlers from TPM. This can break something.")
+        #     TPM2_FlushContext()
+        #     self._app_logger.debug("Handlers removed from TPM.")
 
 
 
