@@ -38,11 +38,11 @@ def close_pipe(fifo):
 
 def read_pipe(path):
     with open(path) as fifo:
+        data = ''
         while True:
-            data = fifo.read()
-            if len(data) == 0:
-                break
-            return data
+            data += fifo.read(1)
+            if data.endswith('\n'):
+                return data[:-1]
 
 
 def dump(data, file):
