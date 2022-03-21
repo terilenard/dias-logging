@@ -30,6 +30,11 @@ def setup_logger(name, log_file, level=logging.DEBUG):
 
     return logger
 
+class StopProcessException(Exception):
+
+    def __init__(self):
+        pass
+
 
 class TPMLogger:
 
@@ -44,8 +49,11 @@ class TPMLogger:
         self._tpm_conf = dict(config["tpm"])
         self._key_loaded = False
 
-        self._pipe = config["log"]["fifo"]
+        self._pipe_path = config["log"]["fifo"]
+        self._pipe = None
         self._queue = list()
+        self._last_message = ""
+        self._should_read = True
 
         self._mqtt_client = MQTTClient(config["mqtt"]["user"],
                                       config["mqtt"]["passwd"],
@@ -53,6 +61,13 @@ class TPMLogger:
                                       int(config["mqtt"]["port"]))
 
         self._loop = asyncio.get_event_loop()
+
+    def _read_pipe(self):
+        self._last_message = ""
+        while self._should_read:
+            self._last_message += self._pipe.read(1)
+            if self._last_message.endswith('\n'):
+                return self._last_message[:-1]
 
     def _check_provision(self):
         """
@@ -68,7 +83,12 @@ class TPMLogger:
 
     async def _listen_on_pipe(self):
 
-        msg = read_pipe(self._pipe)
+        try:
+            msg = self._read_pipe()
+        except StopProcessException:
+            self.stop()
+            return
+
         if not msg:
             asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
             return
@@ -80,15 +100,30 @@ class TPMLogger:
         m = re.search('CAN ID: (.+?) .', log)
         if m:
             found = m.group(1)
-            json_log["CanId"] = int(found)
+            try:
+                json_log["CanId"] = int(found)
+            except ValueError:
+                pass
 
         m = re.search('(.+?) CAN', log)
 
         if m:
             found = m.group(1)
-            json_log["Message"] = found + " ID"
+            json_log["Message"] = found
 
-        json_log["Timestamp"] = time.time()
+        m = re.search("Timestamp: (.+?) .", log)
+        if m:
+            found = m.group(1)
+
+            try:
+                json_log["Timestamp"] = float(found)
+            except ValueError:
+                pass
+        else:
+            json_log["Timestamp"] = time.time()
+
+        json_log["Count"] = 1
+
         if self._mqtt_client.is_connected():
             self._mqtt_client.publish(
             json.dumps(json_log))
@@ -149,10 +184,13 @@ class TPMLogger:
 
     def start(self):
 
-        if not make_pipe(self._pipe):
+        if not make_pipe(self._pipe_path):
             self._app_logger.error("Couldn't create fifo.")
             return False
 
+        self._should_read = True
+        fd = os.open(self._pipe_path, os.O_RDONLY)
+        self._pipe = os.fdopen(fd, "r")
         #
         # success = TPM2_DICTIONARY_LOCKOUT()
         #
@@ -192,6 +230,11 @@ class TPMLogger:
 
     def stop(self):
 
+        if self._pipe:
+            self._should_read = False
+            self._pipe.close()
+
+
         if self._mqtt_client.is_connected():
             self._app_logger.debug("Stopping the mqtt client")
             self._mqtt_client.stop()
@@ -212,7 +255,7 @@ class TPMLogger:
 
 
 def signal_handler(signum, frame):
-    tpm_logger.stop()
+    raise StopProcessException()
 
 
 if __name__ == "__main__":

@@ -29,20 +29,19 @@ def make_pipe(fifo):
 
 
 def open_pipe(fifo):
-    return os.open(fifo, os.O_RDONLY)
-
+    fd = os.open(fifo, os.O_RDONLY)
+    return fd, os.fdopen(fd, "r")
 
 def close_pipe(fifo):
     os.close(fifo)
 
 
-def read_pipe(path):
-    with open(path) as fifo:
-        data = ''
-        while True:
-            data += fifo.read(1)
-            if data.endswith('\n'):
-                return data[:-1]
+def read_pipe(fifo):
+    data = ''
+    while True:
+        data += fifo.read(1)
+        if data.endswith('\n'):
+            return data[:-1]
 
 
 def dump(data, file):
@@ -58,3 +57,10 @@ def load_binary(file):
         data = f.read()
 
     return hexlify(data).decode()
+
+
+if __name__ == "__main__":
+    fd, _pipe = open_pipe("/tmp/fwtpm_pipe")
+    #read_pipe(_pipe)
+    #_pipe.close()
+    os.close(fd)
