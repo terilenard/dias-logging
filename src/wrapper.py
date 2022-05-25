@@ -28,7 +28,7 @@ TPM2T_DICTIONNARY_LOCKOUT = TPM2T_PATH + "tpm2_dictionarylockout"
 TPM2T_TCTI_ABRMD = "--tcti=tabrmd:bus_name=com.intel.tss2.Tabrmd"
 
 
-def TPM2_Provision(folderName, outFileName):
+def TPM2_CreatePrimary(folderName, outFileName):
     '''
     Provisions a new hierarchy of keys (the endorsemene key), and stores the context file in the given folder.
     '''
@@ -192,23 +192,22 @@ def TPM2_ExtendPcr(pcrIndex, digestFile):
 
 def TPM2_ReadPcr(pcrIndex):
     '''
-    Extends a PCR index with the provided digest using sha-1.
+    Reads a PCR index. Returns the actual value as a string or None.
     '''
 
     args = "{}:{}".format("sha1", str(pcrIndex))
     try:
-        print("Before subproc")
         result = subprocess.run([TPM2T_READ_PCR, args], capture_output=True, text=True)
 
-        print("Result " + str(result.stdout))
+        output = result.stdout[-43:].strip()
         if result.returncode == 0:
-            return True
+            return output
 
-        return False
+        return None
 
     except subprocess.SubprocessError:
         print("There was an error while launchnig " + TPM2T_EXTEND_PCR)
-        return False
+        return None
 
 def TPM2_DICTIONARY_LOCKOUT():
 
@@ -225,5 +224,5 @@ def TPM2_DICTIONARY_LOCKOUT():
         return False
 
 if __name__ == "__main__":
-    success = TPM2_DICTIONARY_LOCKOUT()
+    success = TPM2_ReadPcr(3)
     print(str(success))
