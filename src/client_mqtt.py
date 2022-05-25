@@ -10,7 +10,6 @@ Contributors: Teri Lenard
 """
 
 import logging
-from time import sleep
 
 import paho.mqtt.client as mqtt
 
@@ -22,12 +21,24 @@ logger = logging.getLogger(__name__)
 
 class MQTTClient(object):
 
-    def __init__(self, user, password, host, port):
+    def __init__(self, user, password, host, port, service_name="",
+                 on_message_callback=None):
         self._inst = mqtt.Client()
         self._inst.username_pw_set(user, password)
         self._inst.on_connect = self._on_connect
+        self._inst.on_subscribe = self._on_subscribe
+        
+        if on_message_callback:
+            self._inst.on_message = on_message_callback
+        else:
+            self._inst.on_message = self._on_new_message
+
         self._host = host
         self._port = port
+        self._service_name = service_name
+        
+        self._log_topic = "logging/"
+        self._event_topic = "log_events/"
 
     def is_connected(self):
         return self._inst.is_connected()
@@ -38,25 +49,49 @@ class MQTTClient(object):
 
     def stop(self):
         if self._inst.is_connected():
-            self._inst.loop_stop()
+            self._inst.loop_stop(True)
             self._inst.disconnect()
 
     def _on_connect(self, client, userdata, flags, rc):
 
         if rc == 0:
             logger.info("Client connected successfully.")
-            print("connected")
+            self._inst.subscribe(self._log_topic, 0)
+
         else:
             logger.error("Client couldn't connect. Received code: {}.".format(rc))
             logger.info("Client tries reconnect...")
             self._inst.reconnect()
 
-    def publish(self, data):
+    def _on_subscribe(self, mqttc, obj, mid, granted_qos):
+        print("Subscribed: " + str(mid) + " " + str(granted_qos))
 
+    def publish_log(self, data):
         if self._inst.is_connected():
-            self._inst.publish("logging", data)
-            logger.info("Published: {}".format(str(data)))
+            self._inst.publish(self._event_topic, data)
+            print("Published: {}".format(str(data)))
             return True
         else:
             logger.error("Client not connected.")
             return False
+
+
+if __name__ == "__main__":
+    """
+    mosquitto_pub  -h 127.0.0.1 -p 1883 -u mixcan -P mixcan -t logging/MixCAN -m "Roger Roger"
+    """
+
+    def on_new_log(mqttc, obj, msg):
+        print(msg.payload.decode())
+
+    try:
+        client = MQTTClient("tpm_logger", "tpm_logger", "127.0.0.1", 1883, 
+                            service_name="TPMLogger")
+        client.connect()
+        
+        import time
+
+        while True:
+            time.sleep(0.1)
+    except Exception:
+        client.stop()
