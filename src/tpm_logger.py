@@ -196,7 +196,7 @@ class MessageParser():
             can_id = int(MessageParser._get_value(
                 MessageParser.CANID_REGEX, log
             ))
-        except ValueError:
+        except (ValueError, TypeError):
                 pass
 
         parsed_log = MessageParser._get_value(
@@ -207,7 +207,7 @@ class MessageParser():
             timestamp = float(MessageParser._get_value(
                 MessageParser.TIMESTAMP_REGEX, log
             ))
-        except ValueError:
+        except (ValueError, TypeError):
             timestamp = time.time()
 
         return (can_id, parsed_log, count, timestamp)
