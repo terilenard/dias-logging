@@ -59,7 +59,6 @@ class QueryBuilder:
             try:
                 query["query"][0]["$limit"] = int(limit)
             except ValueError as ex:
-                print(ex.__str__())
                 return None
         else:
             query["query"][0]["$limit"] = 1
