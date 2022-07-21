@@ -12,7 +12,7 @@ Contributors: Teri Lenard
 import os
 import errno
 
-from binascii import hexlify
+from binascii import hexlify, unhexlify
 from stat import S_IFIFO, S_IRUSR, S_IWUSR
 
 
@@ -61,6 +61,11 @@ def dump(data, file):
             f.write(str(line))
 
 
+def write_binary(data, file):
+
+    with open(file, "wb") as f:
+        f.write(unhexlify(data))
+
 def load_binary(file):
     data = ''
 
@@ -68,10 +73,3 @@ def load_binary(file):
         data = f.read()
 
     return hexlify(data).decode()
-
-
-if __name__ == "__main__":
-    fd, _pipe = open_pipe("/tmp/fwtpm_pipe")
-    #read_pipe(_pipe)
-    #_pipe.close()
-    os.close(fd)
