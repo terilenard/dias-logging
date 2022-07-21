@@ -64,6 +64,7 @@ class TPMCore:
 
 
         self._key_loaded = False
+
         self._is_provisioned = self._check_provision()
 
         self._sec_logger = setup_logger("TPMLogger", config["log"]["tpm_log"])
@@ -76,31 +77,41 @@ class TPMCore:
     @property
     def is_key_loaded(self):
         return self._key_loaded
-    
+
+    @property
+    def pcr_state(self):
+        # Return True if PCR is 0x00 else False
+
+        pcr_value = TPM2_ReadPcr(self._pcr);
+
+        if "0x0000000000000000000000000000000000000000" == pcr_value:
+            return True
+        return False
+
     def initialise(self):
 
         success = TPM2_DICTIONARY_LOCKOUT()
-        
+
         if success:
             self._app_logger.info("Removed dictionary lockout.")
         else:
             self._app_logger.error("Could not execute dictionary lockout")
-        
+
         success = TPM2_CreatePrimary(self._prov_path, self._primary_ctx)
-        
+
         if success:
             self._app_logger.debug("Recreated primary.ctx in " + self._prov_path)
-        
+
             if success:
                 self._app_logger.debug("Finished recreating primary.ctx.")
             else:
                 self._app_logger.error("Could not recreate primary.ctx.")
-        
+
         self._key_loaded = TPM2_LoadKey(self._prov_path + self._primary_ctx,
                                         self._prov_path + self._key_pub,
                                         self._prov_path + self._key_priv,
                                         self._prov_path + self._key_ctx)
-        
+
         if not self._key_loaded:
             self._app_logger.error("Couldn't load keys into the TPM.")
             return False
@@ -118,7 +129,7 @@ class TPMCore:
 
     def _hash(self, msg):
         return sha1(msg.encode()).hexdigest()
-    
+
     def sign(self, msg):
 
         if not self._key_loaded:
@@ -162,8 +173,8 @@ class TPMCore:
         self._sec_logger.info(json.dumps(json_log))
 
         return json_log
-        
-        
+
+
 class MessageParser():
 
     CANID_REGEX = 'CAN ID: (.+?) .'
@@ -173,12 +184,11 @@ class MessageParser():
     def _get_value(regex, msg):
         found = None
         m = re.search(regex, msg)
-        
+
         if m:
             found = m.group(1)
-        
-        return found
 
+        return found
 
     def parse_message(msg):
         """
@@ -202,7 +212,7 @@ class MessageParser():
         parsed_log = MessageParser._get_value(
                 MessageParser.LOG_REGEX, log
             )
-        
+
         try:
             timestamp = float(MessageParser._get_value(
                 MessageParser.TIMESTAMP_REGEX, log
@@ -214,7 +224,7 @@ class MessageParser():
 
 
 class TPMLogger:
-
+    # @TODO: Remove duplicated log messages
     SERVICE_NAME = "DiasLogging"
     def __init__(self, config):
 
@@ -250,29 +260,14 @@ class TPMLogger:
         except StopProcessException:
             self.stop()
             return
-        
+
         asyncio.run_coroutine_threadsafe(self._listen_on_pipe(), self._loop)
 
         if not msg:
             return
 
-        can_id, parsed_log, count, timestamp = MessageParser.parse_message(msg)
-           
-        json_log = self._tpm_core.sign(parsed_log)
-        """
-        json_log now looks like:
-            json_log{
-                "Message": parsed_log,
-                "Timestamp": timestamp,
-                "Count": count
-        }              Next the can id is set
-        """
-        json_log["CanId"] = can_id
-        
-        if self._mqtt_client.is_connected():
-            self._mqtt_client.publish_log(
-            json.dumps(json_log))
-   
+        self._handle_log(msg)
+
     def start(self):
 
         if not make_pipe(self._pipe_path):
@@ -282,7 +277,7 @@ class TPMLogger:
         self._should_read = True
         fd = os.open(self._pipe_path, os.O_RDONLY)
         self._pipe = os.fdopen(fd, "r")
-                
+
         if not self._tpm_core.initialise():
             self._app_logger.error("Could not initialise/load keys")
             return False
@@ -291,7 +286,7 @@ class TPMLogger:
 
         if self._loop is None:
             self._loop = asyncio.get_event_loop()
-        
+
         self._loop.create_task(self._listen_on_pipe())
 
         self._app_logger.debug("Starting the loop")
@@ -320,13 +315,15 @@ class TPMLogger:
         if not msg:
             self._app_logger.error("Error on receiving new mqtt message")
             return
-        
-        print(msg.payload.decode())
-        can_id, parsed_log, count, timestamp = MessageParser.parse_message(
-                                                msg.payload.decode()
-                                            )
-            
+
+        self._handle_log(msg.payload.decode())
+
+    def _handle_log(self, msg):
+
+        can_id, parsed_log, count, timestamp = MessageParser.parse_message(msg)
+
         json_log = self._tpm_core.sign(parsed_log)
+
         """
         json_log now looks like:
             json_log{
@@ -337,10 +334,21 @@ class TPMLogger:
         Next the can id is set
         """
         json_log["CanId"] = can_id
-        
+        json_log["Timestamp"] = timestamp
+        json_log["Count"] = count
+
+
+        # Indicate that a new PCR chain started
+        # This should be set to False after the first
+        # log is published
+        json_log["IsNewChain"] = self._tpm_core.pcr_state
+
         if self._mqtt_client.is_connected():
             self._mqtt_client.publish_log(
-            json.dumps(json_log))
+                json.dumps(json_log))
+        else:
+            self._app_logger.error("Couldn't publish json to mqtt")
+
 
 def signal_handler(signum, frame):
     raise StopProcessException()
