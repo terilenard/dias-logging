@@ -13,7 +13,6 @@ import asyncio
 import json
 import signal
 import sys
-import logging
 import re
 import time
 
@@ -22,24 +21,12 @@ from configparser import ConfigParser
 from argparse import ArgumentParser
 from hashlib import sha1
 
+from log import logger
 from client_mqtt import MQTTClient
 from utils import *
 from wrapper import TPM2_FlushContext, TPM2_LoadKey, TPM2_Sign, TPM2_Hash, \
     TPM2_ExtendPcr, TPM2_ReadPcr, TPM2_CreatePrimary, TPM2_DICTIONARY_LOCKOUT
 
-
-def setup_logger(name, log_file, level=logging.DEBUG):
-    """To setup as many loggers as you want"""
-    formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-
-    handler = logging.FileHandler(log_file)
-    handler.setFormatter(formatter)
-
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.addHandler(handler)
-
-    return logger
 
 class StopProcessException(Exception):
 
@@ -67,9 +54,6 @@ class TPMCore:
 
         self._is_provisioned = self._check_provision()
 
-        self._sec_logger = setup_logger("TPMLogger", config["log"]["tpm_log"])
-        self._app_logger = setup_logger("ServiceTPMLogger", config["log"]["info_log"])
-
     @property
     def is_provisioned(self):
         return self._is_provisioned
@@ -93,19 +77,19 @@ class TPMCore:
         success = TPM2_DICTIONARY_LOCKOUT()
 
         if success:
-            self._app_logger.info("Removed dictionary lockout.")
+            logger.info("Removed dictionary lockout.")
         else:
-            self._app_logger.error("Could not execute dictionary lockout")
+            logger.error("Could not execute dictionary lockout")
 
         success = TPM2_CreatePrimary(self._prov_path, self._primary_ctx)
 
         if success:
-            self._app_logger.debug("Recreated primary.ctx in " + self._prov_path)
+            logger.debug("Recreated primary.ctx in " + self._prov_path)
 
             if success:
-                self._app_logger.debug("Finished recreating primary.ctx.")
+                logger.debug("Finished recreating primary.ctx.")
             else:
-                self._app_logger.error("Could not recreate primary.ctx.")
+                logger.error("Could not recreate primary.ctx.")
 
         self._key_loaded = TPM2_LoadKey(self._prov_path + self._primary_ctx,
                                         self._prov_path + self._key_pub,
@@ -113,7 +97,7 @@ class TPMCore:
                                         self._prov_path + self._key_ctx)
 
         if not self._key_loaded:
-            self._app_logger.error("Couldn't load keys into the TPM.")
+            logger.error("Couldn't load keys into the TPM.")
             return False
 
         return True
@@ -133,7 +117,7 @@ class TPMCore:
     def sign(self, msg):
 
         if not self._key_loaded:
-            print("Keys not loaded.")
+            logger.error("Keys not loaded.")
             return False
 
         json_log = dict()
@@ -145,15 +129,13 @@ class TPMCore:
         digest = TPM2_Hash(self._tmp_file, self._digest_file)
 
         if not digest:
-            print("Couldn't hash: {}.".format(msg))
+            logger.error("Couldn't hash: {}.".format(msg))
             return False
-
-        self._app_logger.info("Extending pcr with:" + self._digest_file)
 
         success = TPM2_ExtendPcr(self._pcr, self._digest_file)
 
         if not success:
-            print("Couldn't extend PCR {} with {}".format(
+            logger.error("Couldn't extend PCR {} with {}".format(
                         self._pcr, self._digest_file))
             return False
 
@@ -163,14 +145,14 @@ class TPMCore:
                             self._digest_file, self._sign_file)
 
         if not success:
-            print("Couldn't sign {}".format(str(msg)))
+            logger.error("Couldn't sign {}".format(str(msg)))
             return False
 
         signature = load_binary(self._sign_file)
 
         json_log["Signature"] = signature
 
-        self._sec_logger.info(json.dumps(json_log))
+        logger.info("New secure log: " + json.dumps(json_log))
 
         return json_log
 
@@ -224,11 +206,8 @@ class MessageParser():
 
 
 class TPMLogger:
-    # @TODO: Remove duplicated log messages
-    SERVICE_NAME = "DiasLogging"
-    def __init__(self, config):
 
-        self._app_logger = setup_logger("ServiceTPMLogger", config["log"]["info_log"])
+    def __init__(self, config):
 
         self._tpm_core = TPMCore(config)
 
@@ -250,7 +229,6 @@ class TPMLogger:
         while self._should_read:
             _last_message += self._pipe.read(1)
             if _last_message.endswith('\n'):
-                print(_last_message)
                 return _last_message[:-1]
 
     async def _listen_on_pipe(self):
@@ -271,7 +249,7 @@ class TPMLogger:
     def start(self):
 
         if not make_pipe(self._pipe_path):
-            self._app_logger.error("Couldn't create fifo.")
+            logger.error("Couldn't create fifo.")
             return False
 
         self._should_read = True
@@ -279,7 +257,7 @@ class TPMLogger:
         self._pipe = os.fdopen(fd, "r")
 
         if not self._tpm_core.initialise():
-            self._app_logger.error("Could not initialise/load keys")
+            logger.error("Could not initialise/load keys")
             return False
 
         self._mqtt_client.connect()
@@ -289,7 +267,7 @@ class TPMLogger:
 
         self._loop.create_task(self._listen_on_pipe())
 
-        self._app_logger.debug("Starting the loop")
+        logger.debug("Starting the loop")
         self._loop.run_forever()
 
     def stop(self):
@@ -299,21 +277,19 @@ class TPMLogger:
             self._pipe.close()
 
         if self._mqtt_client.is_connected():
-            self._app_logger.debug("Stopping the mqtt client")
+            logger.debug("Stopping the mqtt client")
             self._mqtt_client.stop()
-            self._app_logger.debug("Mqtt client stopped")
+            logger.debug("Mqtt client stopped")
 
         if self._loop.is_running:
-            self._app_logger.debug("Stopping the loop...")
-
+            logger.debug("Stopping the loop...")
             self._loop.call_soon_threadsafe(self._loop.stop)
-
-            self._app_logger.debug("Loop stopped.")
+            logger.debug("Loop stopped.")
 
     def _on_new_message(self, mqttc, obj, msg):
 
         if not msg:
-            self._app_logger.error("Error on receiving new mqtt message")
+            logger.error("Error on receiving new mqtt message")
             return
 
         self._handle_log(msg.payload.decode())
@@ -347,7 +323,7 @@ class TPMLogger:
             self._mqtt_client.publish_log(
                 json.dumps(json_log))
         else:
-            self._app_logger.error("Couldn't publish json to mqtt")
+            logger.error("Couldn't publish json to mqtt")
 
 
 def signal_handler(signum, frame):
