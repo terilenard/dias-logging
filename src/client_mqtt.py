@@ -8,15 +8,7 @@ Technology of Târgu Mureş <https://nislab.umfst.ro/>
 
 Contributors: Teri Lenard
 """
-
-import logging
-
 import paho.mqtt.client as mqtt
-
-# Dependencies
-# pip3 install paho-mqtt
-
-logger = logging.getLogger(__name__)
 
 
 class MQTTClient(object):
@@ -27,7 +19,7 @@ class MQTTClient(object):
         self._inst.username_pw_set(user, password)
         self._inst.on_connect = self._on_connect
         self._inst.on_subscribe = self._on_subscribe
-        
+
         if on_message_callback:
             self._inst.on_message = on_message_callback
         else:
@@ -36,7 +28,7 @@ class MQTTClient(object):
         self._host = host
         self._port = port
         self._service_name = service_name
-        
+
         self._log_topic = "logging/"
         self._event_topic = "log_events/"
 
@@ -55,30 +47,25 @@ class MQTTClient(object):
     def _on_connect(self, client, userdata, flags, rc):
 
         if rc == 0:
-            logger.info("Client connected successfully.")
             self._inst.subscribe(self._log_topic, 0)
 
         else:
-            logger.error("Client couldn't connect. Received code: {}.".format(rc))
-            logger.info("Client tries reconnect...")
             self._inst.reconnect()
 
     def _on_subscribe(self, mqttc, obj, mid, granted_qos):
-        print("Subscribed: " + str(mid) + " " + str(granted_qos))
+        pass
 
     def publish_log(self, data):
         if self._inst.is_connected():
             self._inst.publish(self._event_topic, data)
-            print("Published: {}".format(str(data)))
             return True
         else:
-            logger.error("Client not connected.")
             return False
 
 
 if __name__ == "__main__":
     """
-    mosquitto_pub  -h 127.0.0.1 -p 1883 -u mixcan -P mixcan -t logging/MixCAN -m "Roger Roger"
+    mosquitto_pub  -h 127.0.0.1 -p 1883 -u mixcan -P mixcan -t logging/ -m "Roger Roger"
     """
 
     def on_new_log(mqttc, obj, msg):
@@ -88,7 +75,7 @@ if __name__ == "__main__":
         client = MQTTClient("tpm_logger", "tpm_logger", "127.0.0.1", 1883, 
                             service_name="TPMLogger")
         client.connect()
-        
+
         import time
 
         while True:
