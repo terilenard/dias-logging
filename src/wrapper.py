@@ -24,6 +24,8 @@ TPM2T_HASH = TPM2T_PATH + "tpm2_hash"
 TPM2T_EXTEND_PCR = TPM2T_PATH + "tpm2_pcrextend"
 TPM2T_READ_PCR = TPM2T_PATH + "tpm2_pcrread"
 TPM2T_DICTIONNARY_LOCKOUT = TPM2T_PATH + "tpm2_dictionarylockout"
+TPM2T_VERIFY = TPM2T_PATH + "tpm2_verifysignature"
+TPM2T_PCRRESET = TPM2T_PATH + "tpm2_pcrreset"
 
 TPM2T_TCTI_ABRMD = "--tcti=tabrmd:bus_name=com.intel.tss2.Tabrmd"
 
@@ -221,6 +223,46 @@ def TPM2_DICTIONARY_LOCKOUT():
 
     except subprocess.SubprocessError:
         print("There was an error while launchnig " + TPM2T_EXTEND_PCR)
+        return False
+
+
+def TPM2_LoadExternalPubKey(pkFile, outFileName):
+
+    try:
+        result = subprocess.run([TPM2T_LOADEXTERNAL, '-C', 'n', '-u', pkFile, '-c', outFileName, TPM2T_TCTI_ABRMD])
+    except Exception as ex:
+        print("There was an error while launchnig " + TPM2T_LOADEXTERNAL)
+        return False
+
+    return True
+
+
+def TPM2_Verify(keyFile, fData, fSig):
+    '''
+    Signs with RSA the given file (containing a hash), and produces the output file. It also verifies that the hash was created by the TPM.
+    Ticket is ignored for now, the TPM produces errors.
+    '''
+
+    # Run the command
+    result = ''
+    try:
+        result = subprocess.run([TPM2T_VERIFY, '-c', keyFile,'-m', fData, '-s', fSig, TPM2T_TCTI_ABRMD])
+    except Exception as ex:
+        print("There was an error while launchnig " + TPM2T_SIGN)
+        print("Exception: " + str(ex))
+        return False
+
+    if ('returncode=0' in str(result)):
+        return True
+    return False
+
+def TPM2_ResetPCR():
+    try:
+        subprocess.run([TPM2T_PCRRESET])
+        return True
+    except Exception as ex:
+        print("There was an error while launchnig " + TPM2T_SIGN)
+        print("Exception: " + str(ex))
         return False
 
 if __name__ == "__main__":
